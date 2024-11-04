@@ -1,0 +1,218 @@
+To run your REST API tests automatically after deployment and application start, you can set up integration tests using the maven-failsafe-plugin and automate test execution in your deployment pipeline. I’ll provide a step-by-step guide using the vehicle example.
+
+Step 1: Define Your Project Structure
+
+Let’s assume you’re working with a Spring Boot microservices project with REST endpoints for vehicle management.
+
+vehicle-app/
+├── src/
+│   ├── main/
+│   │   ├── java/com/example/vehicle/VehicleApplication.java
+│   │   └── java/com/example/vehicle/controller/VehicleController.java
+│   └── test/
+│       └── java/com/example/vehicle/VehicleApplicationIT.java
+├── pom.xml
+
+
+Step 2: Set Up the REST Application
+
+VehicleApplication.java
+
+This is the main application class for running the Spring Boot microservice.
+
+
+package com.example.vehicle;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+
+@SpringBootApplication
+public class VehicleApplication {
+    public static void main(String[] args) {
+        SpringApplication.run(VehicleApplication.class, args);
+    }
+}
+
+
+
+
+VehicleController.java
+
+A simple REST controller with endpoints to add, get, and delete vehicle data.
+
+
+package com.example.vehicle.controller;
+
+import org.springframework.web.bind.annotation.*;
+
+import java.util.HashMap;
+import java.util.Map;
+
+@RestController
+@RequestMapping("/vehicles")
+public class VehicleController {
+    
+    private Map<String, String> vehicles = new HashMap<>();
+
+    @GetMapping("/{id}")
+    public String getVehicle(@PathVariable String id) {
+        return vehicles.getOrDefault(id, "Vehicle not found");
+    }
+
+    @PostMapping("/{id}")
+    public String addVehicle(@PathVariable String id, @RequestBody String vehicleInfo) {
+        vehicles.put(id, vehicleInfo);
+        return "Vehicle added successfully";
+    }
+
+    @DeleteMapping("/{id}")
+    public String deleteVehicle(@PathVariable String id) {
+        vehicles.remove(id);
+        return "Vehicle removed successfully";
+    }
+}
+
+
+
+Step 3: Configure the pom.xml
+
+Use the maven-failsafe-plugin to handle integration tests that should run after deployment. You’ll also configure spring-boot-maven-plugin to package and run the application.
+
+pom.xml
+
+
+<project>
+    ...
+    <properties>
+        <!-- Default base URL for local environment -->
+        <base.url>http://localhost:8080</base.url>
+    </properties>
+
+    <build>
+        <plugins>
+            <!-- Failsafe plugin for integration tests -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-failsafe-plugin</artifactId>
+                <version>3.0.0-M5</version>
+                <executions>
+                    <execution>
+                        <id>integration-test</id>
+                        <goals>
+                            <goal>integration-test</goal>
+                            <goal>verify</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+
+            <!-- Spring Boot plugin to run the application -->
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+            </plugin>
+        </plugins>
+    </build>
+</project>
+
+
+Step 4: Write the Integration Test (VehicleApplicationIT.java)
+
+In this test, we use Rest Assured to check that the application is running by calling a health endpoint and testing other endpoints as well. These tests will wait until the application is fully started and ready.
+
+
+package com.example.vehicle;
+
+import io.restassured.RestAssured;
+import org.awaitility.Awaitility;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
+
+import java.util.concurrent.TimeUnit;
+
+import static io.restassured.RestAssured.given;
+import static org.hamcrest.Matchers.equalTo;
+
+public class VehicleApplicationIT {
+
+    @BeforeAll
+    public static void setup() {
+        // Set base URL with a default to localhost if not provided
+        String baseUrl = System.getProperty("base.url", "http://localhost:8080");
+        RestAssured.baseURI = baseUrl;
+
+        // Wait until the application is ready
+        Awaitility.await().atMost(60, TimeUnit.SECONDS).pollInterval(5, TimeUnit.SECONDS)
+                .until(() -> {
+                    try {
+                        int statusCode = given().get("/vehicles/health").statusCode();
+                        return statusCode == 200;
+                    } catch (Exception e) {
+                        return false;
+                    }
+                });
+    }
+
+    @Test
+    public void testAddAndGetVehicle() {
+        // Test adding a vehicle
+        given()
+            .body("Tesla Model S")
+            .when()
+            .post("/vehicles/1")
+            .then()
+            .statusCode(200)
+            .body(equalTo("Vehicle added successfully"));
+
+        // Test retrieving the vehicle
+        given()
+            .when()
+            .get("/vehicles/1")
+            .then()
+            .statusCode(200)
+            .body(equalTo("Tesla Model S"));
+    }
+
+    @Test
+    public void testDeleteVehicle() {
+        // Test deleting the vehicle
+        given()
+            .when()
+            .delete("/vehicles/1")
+            .then()
+            .statusCode(200)
+            .body(equalTo("Vehicle removed successfully"));
+    }
+}
+
+
+
+
+Step 5: Automate Tests After Deployment
+
+To run the tests after deployment, you can add these steps to your CI/CD pipeline. Here’s a general approach:
+
+	1.	Build and Deploy the Application: Package the application and deploy it to your sandbox or production environment.
+
+
+mvn clean package spring-boot:run
+
+
+2.	Run the Failsafe Tests: Once the application is deployed and started, trigger the Failsafe tests.
+
+mvn verify -Dbase.url=http://sandbox.example.com
+
+
+This command activates the maven-failsafe-plugin, which will execute the integration tests after confirming that the application is reachable on the specified base.url.
+
+Step 6: Pipeline Integration
+
+In your CI/CD pipeline (e.g., Jenkins, GitLab CI), you can add the following stages:
+
+	1.	Build and Deploy:
+	•	Run mvn clean package to build the project.
+	•	Deploy the artifact to your target environment (sandbox or production).
+	2.	Test After Deployment:
+	•	Run mvn verify -Dbase.url=http://sandbox.example.com in the CI/CD pipeline to execute the integration tests automatically.
+
+This setup allows tests to run against a live deployment of the application, ensuring it’s functioning as expected before fully releasing it.
