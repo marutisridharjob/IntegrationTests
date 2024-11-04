@@ -1,0 +1,139 @@
+To run maven-failsafe-plugin tests on a sandbox environment, you can configure the project to target the sandbox server instead of localhost. Here’s a step-by-step approach:
+
+1. Configure Sandbox-Specific Properties
+
+Set up a profile in your pom.xml to include sandbox-specific properties (like the base URL for API endpoints). These properties will allow the tests to point to the sandbox environment rather than your local environment.
+
+Example pom.xml with Sandbox Profile
+
+
+<project>
+    ...
+    <properties>
+        <!-- Default base URL for local environment -->
+        <base.url>http://localhost:8080</base.url>
+    </properties>
+
+    <profiles>
+        <profile>
+            <id>sandbox</id>
+            <properties>
+                <!-- Override with sandbox environment URL -->
+                <base.url>https://sandbox.example.com</base.url>
+            </properties>
+        </profile>
+    </profiles>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-failsafe-plugin</artifactId>
+                <version>3.0.0-M5</version>
+                <executions>
+                    <execution>
+                        <id>integration-test</id>
+                        <goals>
+                            <goal>integration-test</goal>
+                            <goal>verify</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+</project>
+
+
+
+
+
+2. Modify Your Integration Test to Use the Sandbox URL
+
+Update the test class to read the base.url from the system properties, which can be overridden when running in different environments.
+
+Example VehicleApplicationIT.java with Configurable Base URL
+
+
+
+package com.example.vehicle;
+
+import io.restassured.RestAssured;
+import org.awaitility.Awaitility;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
+import org.springframework.boot.test.context.SpringBootTest;
+
+import java.util.concurrent.TimeUnit;
+
+import static io.restassured.RestAssured.given;
+import static org.hamcrest.Matchers.equalTo;
+
+public class VehicleApplicationIT {
+
+    @BeforeAll
+    public static void setup() {
+        // Set the base URI dynamically based on the environment
+        RestAssured.baseURI = System.getProperty("base.url");
+
+        // Wait until the sandbox application is ready
+        Awaitility.await().atMost(60, TimeUnit.SECONDS).pollInterval(5, TimeUnit.SECONDS)
+                .until(() -> {
+                    try {
+                        int statusCode = given().get("/vehicles/health").statusCode();
+                        return statusCode == 200;
+                    } catch (Exception e) {
+                        return false;
+                    }
+                });
+    }
+
+    @Test
+    public void testAddAndGetVehicle() {
+        given()
+            .body("Tesla Model S")
+            .when()
+            .post("/vehicles/1")
+            .then()
+            .statusCode(200)
+            .body(equalTo("Vehicle added successfully"));
+
+        given()
+            .when()
+            .get("/vehicles/1")
+            .then()
+            .statusCode(200)
+            .body(equalTo("Tesla Model S"));
+    }
+
+    @Test
+    public void testDeleteVehicle() {
+        given()
+            .when()
+            .delete("/vehicles/1")
+            .then()
+            .statusCode(200)
+            .body(equalTo("Vehicle removed successfully"));
+    }
+}
+
+
+
+3. Run the Integration Tests on Sandbox Environment
+
+Use the following command to activate the sandbox profile and run the Failsafe tests targeting the sandbox environment:
+
+
+mvn verify -Psandbox
+
+
+	•	-Psandbox: Activates the sandbox profile, setting base.url to the sandbox URL.
+	•	mvn verify: Runs the Failsafe integration tests by executing the integration-test and verify phases.
+
+Additional Tips
+
+	•	Environment-Specific Variables: If your sandbox requires credentials, you can add these to the sandbox profile or pass them as system properties in the command line.
+	•	Health Check Endpoint: Adjust the health check endpoint URL if it’s different in the sandbox environment.
+	•	Timeouts and Polling: You may need to adjust Awaitility timeouts or other network settings based on sandbox performance.
+
+This setup allows you to run integration tests on the sandbox environment without modifying the test code or hardcoding URLs. The properties-based approach makes it easy to switch between environments.
