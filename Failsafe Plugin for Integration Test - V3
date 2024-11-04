@@ -1,0 +1,118 @@
+To automatically start tests on your sandbox environment after the application starts, you can integrate a test runner within your application or use a lightweight service that monitors the application status and then triggers the tests. Here are two approaches:
+
+Option 1: Embedded Test Trigger Within the Application
+
+You can configure the application to start tests automatically after it launches by embedding a testing trigger that runs once the application is ready.
+
+	1.	Create a Startup Listener in your Spring Boot application to trigger tests once the application is fully started.
+
+ApplicationStartupListener.java
+
+
+package com.example.vehicle;
+
+import io.restassured.RestAssured;
+import org.springframework.boot.context.event.ApplicationReadyEvent;
+import org.springframework.context.ApplicationListener;
+import org.springframework.stereotype.Component;
+
+import static io.restassured.RestAssured.given;
+
+@Component
+public class ApplicationStartupListener implements ApplicationListener<ApplicationReadyEvent> {
+
+    @Override
+    public void onApplicationEvent(ApplicationReadyEvent event) {
+        runIntegrationTests();
+    }
+
+    private void runIntegrationTests() {
+        // Set up RestAssured to point to the application base URL
+        RestAssured.baseURI = "http://localhost:8080";
+
+        try {
+            // Test adding a vehicle
+            given()
+                .body("Tesla Model S")
+                .when()
+                .post("/vehicles/1")
+                .then()
+                .statusCode(200)
+                .body(equalTo("Vehicle added successfully"));
+
+            // Test retrieving the vehicle
+            given()
+                .when()
+                .get("/vehicles/1")
+                .then()
+                .statusCode(200)
+                .body(equalTo("Tesla Model S"));
+
+            // Test deleting the vehicle
+            given()
+                .when()
+                .delete("/vehicles/1")
+                .then()
+                .statusCode(200)
+                .body(equalTo("Vehicle removed successfully"));
+
+            System.out.println("Integration tests completed successfully.");
+        } catch (Exception e) {
+            System.err.println("Integration tests failed: " + e.getMessage());
+        }
+    }
+}
+
+
+This listener triggers automatically once the application is ready. The runIntegrationTests() method contains your test cases and will execute them after the application starts.
+
+	2.	Add the Listener to the Spring Boot Application:
+
+Spring Boot will automatically detect and run any ApplicationListener components, so no additional configuration is needed.
+
+	3.	Deploy to Sandbox:
+
+When you deploy your application, the listener will automatically run the tests once the application is ready. This solution avoids any CLI commands and integrates the tests as part of the application lifecycle.
+
+Option 2: Use a Health Check Service to Trigger Tests
+
+Another approach is to set up a simple health check service that monitors your application’s status and triggers tests when it detects the application has started. This approach is external and doesn’t require modifying the application code.
+
+	1.	Create a Lightweight Test Runner Service (could be another Spring Boot app or a simple script) that:
+	•	Polls the /health endpoint of your sandbox application.
+	•	Once the application responds with a healthy status, it triggers the integration tests.
+
+Sample Test Runner Script (Bash)
+
+You could use a simple bash script with curl and Rest Assured commands in a separate test runner service:
+
+
+#!/bin/bash
+
+# Base URL of the sandbox application
+BASE_URL="http://sandbox.example.com"
+
+# Wait until the application is ready
+until $(curl --output /dev/null --silent --head --fail "$BASE_URL/health"); do
+    echo "Waiting for application to start..."
+    sleep 5
+done
+
+echo "Application is ready. Running integration tests..."
+
+# Trigger tests with Rest Assured using a JUnit runner or Maven
+mvn verify -Dbase.url=$BASE_URL
+
+
+	2.	Deploy the Test Runner Script:
+	•	Place this script on the same server as your application, or in a CI/CD runner configured to monitor the application.
+	•	The script will automatically wait for the application to become available and then run the tests.
+	3.	Configure Automatic Execution:
+	•	Set this script to run automatically after deployment, either as part of the CI/CD pipeline or as a scheduled task on the server.
+
+Summary
+
+	•	Option 1 (Embedded Listener): Suitable if you prefer the tests to be integrated into the application lifecycle and need them to run automatically post-deployment.
+	•	Option 2 (External Test Runner): Useful if you prefer to keep testing and application code separate and want to automate tests with minimal changes to the application itself.
+
+Both methods allow tests to start automatically in the sandbox environment without needing manual commands after the application has started.
