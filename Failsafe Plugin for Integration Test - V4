@@ -1,0 +1,115 @@
+If your REST code and tests are in the same project, and you want the tests to automatically trigger after the application starts in the sandbox without manual intervention, you can configure the application to start the tests programmatically after it is fully initialized. This can be achieved by setting up a Spring Boot listener or a custom component that will trigger the tests once the application has fully started.
+
+Here’s a step-by-step guide to implement this in your project:
+
+Step 1: Create a Test Runner Component
+
+Create a Spring Boot component that will run the tests automatically after the application has started. This component listens for the ApplicationReadyEvent, which is triggered once the Spring Boot application is fully initialized and ready to serve requests.
+
+TestRunnerComponent.java
+
+This component will use Rest Assured to programmatically execute your integration tests against the deployed application.
+
+
+package com.example.vehicle;
+
+import io.restassured.RestAssured;
+import org.springframework.boot.context.event.ApplicationReadyEvent;
+import org.springframework.context.ApplicationListener;
+import org.springframework.stereotype.Component;
+
+import static io.restassured.RestAssured.given;
+import static org.hamcrest.Matchers.equalTo;
+
+@Component
+public class TestRunnerComponent implements ApplicationListener<ApplicationReadyEvent> {
+
+    @Override
+    public void onApplicationEvent(ApplicationReadyEvent event) {
+        // Set up Rest Assured to use the base URL of the sandbox application
+        RestAssured.baseURI = "http://localhost:8080"; // Replace with sandbox URL if needed
+
+        try {
+            System.out.println("Starting integration tests...");
+
+            // Test adding a vehicle
+            given()
+                .body("Tesla Model S")
+                .when()
+                .post("/vehicles/1")
+                .then()
+                .statusCode(200)
+                .body(equalTo("Vehicle added successfully"));
+
+            // Test retrieving the vehicle
+            given()
+                .when()
+                .get("/vehicles/1")
+                .then()
+                .statusCode(200)
+                .body(equalTo("Tesla Model S"));
+
+            // Test deleting the vehicle
+            given()
+                .when()
+                .delete("/vehicles/1")
+                .then()
+                .statusCode(200)
+                .body(equalTo("Vehicle removed successfully"));
+
+            System.out.println("Integration tests completed successfully.");
+
+        } catch (Exception e) {
+            System.err.println("Integration tests failed: " + e.getMessage());
+        }
+    }
+}
+
+
+Step 2: Adjust the Base URL for Sandbox
+
+In TestRunnerComponent.java, replace the baseURI with the actual sandbox URL when you deploy to sandbox, or make it configurable using environment properties:
+
+RestAssured.baseURI = System.getProperty("base.url", "http://localhost:8080");
+
+Then, when deploying to sandbox, you can set the base URL by passing it as a system property:
+
+java -jar vehicle-app.jar -Dbase.url=http://sandbox.example.com
+
+Step 3: Exclude Tests from Standard Test Phases
+
+If your integration tests are automatically running on application startup, you may want to skip running them during the mvn test phase. You can configure the maven-surefire-plugin or maven-failsafe-plugin to only run specific tests, or simply exclude the tests from these phases by marking them with a different suffix, such as *IT.java for integration tests.
+
+For example, in your pom.xml:
+
+<build>
+    <plugins>
+        <!-- Surefire plugin for unit tests only -->
+        <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-surefire-plugin</artifactId>
+            <version>3.0.0-M5</version>
+            <configuration>
+                <excludes>
+                    <exclude>**/*IT.java</exclude>
+                </excludes>
+            </configuration>
+        </plugin>
+    </plugins>
+</build>
+
+
+Step 4: Deploy to Sandbox
+
+After implementing the TestRunnerComponent, deploy the application to your sandbox environment as usual. When the application starts up, the TestRunnerComponent will automatically execute the integration tests.
+
+Summary
+
+This setup integrates the test execution directly within your application lifecycle:
+
+	•	On Application Startup: The TestRunnerComponent automatically runs your tests.
+	•	Customizable Base URL: The base.url can be dynamically set to accommodate different environments.
+	•	Simplified Execution: No CLI commands are needed after deployment, as tests run automatically.
+
+This approach enables seamless, automated testing on the sandbox environment after each deployment, ensuring that the application is validated as soon as it starts.
+
