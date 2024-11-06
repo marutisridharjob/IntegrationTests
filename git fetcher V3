@@ -291,6 +291,135 @@ connection.setRequestProperty("Authorization", "token YOUR_GITHUB_TOKEN");
 
 This solution allows you to efficiently retrieve and read a .txt file from a GitHub repository without cloning the repository.
 
+-------------------
+
+
+GitHub has deprecated the use of username and password for API authentication. Instead, they now require the use of personal access tokens (PATs). This token acts as a password and is safer because you can control its permissions and easily revoke it if needed.
+
+However, if you have another Git service that still supports basic authentication (username and password), here’s how you would modify the code:
+
+Basic Authentication with Username and Password (If Supported by the Service)
+
+Note: This example assumes the service still allows username and password authentication, which is not the case for GitHub but may work with other Git providers.
+
+Update GitHubTextFileReader.java with Username and Password Authentication
+
+Add your Git username and password in the code:
+
+
+package com.example;
+
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
+
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.util.Base64;
+import java.util.Scanner;
+
+public class GitHubTextFileReader {
+
+    private static final String USERNAME = "your_username";  // Replace with your Git username
+    private static final String PASSWORD = "your_password";  // Replace with your Git password
+
+    public static void main(String[] args) {
+        String projectName = "sample-project"; // Replace with the repository name
+        String filePath = "path/to/file.txt"; // Path to the specific .txt file within the repository
+
+        try {
+            String repoUrl = searchRepository(projectName);
+            if (repoUrl != null) {
+                readTextFileFromRepo(repoUrl, filePath);
+            } else {
+                System.out.println("Repository not found.");
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    // Step 1: Search for the repository by name using GitHub API
+    public static String searchRepository(String projectName) throws Exception {
+        String apiUrl = "https://api.github.com/search/repositories?q=" + projectName + "+in:name";
+        HttpURLConnection connection = (HttpURLConnection) new URL(apiUrl).openConnection();
+        connection.setRequestMethod("GET");
+        connection.setRequestProperty("Accept", "application/vnd.github.v3+json");
+        
+        // Add basic authentication header with Base64-encoded username:password
+        String auth = USERNAME + ":" + PASSWORD;
+        String encodedAuth = Base64.getEncoder().encodeToString(auth.getBytes());
+        connection.setRequestProperty("Authorization", "Basic " + encodedAuth);
+
+        int responseCode = connection.getResponseCode();
+        if (responseCode == 200) {
+            Scanner scanner = new Scanner(connection.getInputStream());
+            StringBuilder response = new StringBuilder();
+            while (scanner.hasNext()) {
+                response.append(scanner.nextLine());
+            }
+            scanner.close();
+
+            JsonObject jsonResponse = JsonParser.parseString(response.toString()).getAsJsonObject();
+            if (jsonResponse.getAsJsonArray("items").size() > 0) {
+                JsonObject firstResult = jsonResponse.getAsJsonArray("items").get(0).getAsJsonObject();
+                String repoFullName = firstResult.get("full_name").getAsString();
+                System.out.println("Repository found: " + repoFullName);
+                return repoFullName;
+            }
+        } else {
+            System.out.println("Failed to search GitHub. Response Code: " + responseCode);
+        }
+        return null;
+    }
+
+    // Step 2: Read content from the specified .txt file
+    public static void readTextFileFromRepo(String repoFullName, String filePath) throws Exception {
+        String apiUrl = "https://api.github.com/repos/" + repoFullName + "/contents/" + filePath;
+        HttpURLConnection connection = (HttpURLConnection) new URL(apiUrl).openConnection();
+        connection.setRequestMethod("GET");
+        connection.setRequestProperty("Accept", "application/vnd.github.v3+json");
+        
+        // Add basic authentication header with Base64-encoded username:password
+        String auth = USERNAME + ":" + PASSWORD;
+        String encodedAuth = Base64.getEncoder().encodeToString(auth.getBytes());
+        connection.setRequestProperty("Authorization", "Basic " + encodedAuth);
+
+        int responseCode = connection.getResponseCode();
+        if (responseCode == 200) {
+            BufferedReader reader = new BufferedReader(new InputStreamReader(connection.getInputStream()));
+            StringBuilder response = new StringBuilder();
+            String line;
+            while ((line = reader.readLine()) != null) {
+                response.append(line);
+            }
+            reader.close();
+
+            JsonObject jsonResponse = JsonParser.parseString(response.toString()).getAsJsonObject();
+            if (jsonResponse.has("type") && jsonResponse.get("type").getAsString().equals("file")) {
+                // Decode the Base64 content
+                String content = jsonResponse.get("content").getAsString();
+                String decodedContent = new String(Base64.getDecoder().decode(content));
+                System.out.println("File content:\n" + decodedContent);
+            } else {
+                System.out.println("The specified path is not a file.");
+            }
+        } else {
+            System.out.println("Failed to retrieve file. Response Code: " + responseCode);
+        }
+    }
+}
+
+
+Explanation
+
+	1.	Encoding Authentication: The code uses Base64 encoding to encode the username:password combination and sets it as the Authorization header with the Basic prefix.
+	2.	Adding the Header: The Authorization header with the Basic authentication string is added to each request (searchRepository and readTextFileFromRepo).
+
+Important Note
+
+If you’re using GitHub, switch to personal access tokens instead of username and password since GitHub no longer supports password-based authentication for its API.
 
 
 
