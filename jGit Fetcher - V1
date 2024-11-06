@@ -102,3 +102,112 @@ In Windows, set variables in the command prompt:
 setx GIT_USERNAME "your-username"
 setx GIT_TOKEN "your-token"
 
+
+------------------------------------------------------------------------------------------------------------------------
+
+To search for the Git repository URL within a project directory and then clone it, you can write a Java program to:
+
+	1.	Traverse the project directory for a file (e.g., config.properties or .git/config) that contains the repository URL.
+	2.	Extract the URL from this file.
+	3.	Use the URL to clone or fetch the repository.
+
+Here’s an example of how to achieve this:
+
+Java Code Example
+
+This program will:
+
+	•	Search the directory for a specific file (config.properties or .git/config).
+	•	Read the URL from this file.
+	•	Clone or fetch the repository using JGit.
+
+import org.eclipse.jgit.api.Git;
+import org.eclipse.jgit.api.errors.GitAPIException;
+import org.eclipse.jgit.transport.UsernamePasswordCredentialsProvider;
+
+import java.io.BufferedReader;
+import java.io.File;
+import java.io.FileReader;
+import java.io.IOException;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
+public class GitRepositorySearcher {
+    public static void main(String[] args) {
+        String projectRootPath = "path/to/your/project"; // Path to your local project folder
+        String localRepoPath = "path/to/clone/repo";     // Where you want to clone the repo
+
+        // Credentials (from environment or default values)
+        String username = System.getenv().getOrDefault("GIT_USERNAME", "default-username");
+        String token = System.getenv().getOrDefault("GIT_TOKEN", "default-token");
+
+        try {
+            // Step 1: Search for the repository URL
+            String repoUrl = findRepositoryUrl(new File(projectRootPath));
+            if (repoUrl != null) {
+                System.out.println("Found repository URL: " + repoUrl);
+
+                // Step 2: Clone or fetch the repository
+                Git git = Git.cloneRepository()
+                        .setURI(repoUrl)
+                        .setDirectory(new File(localRepoPath))
+                        .setCredentialsProvider(new UsernamePasswordCredentialsProvider(username, token))
+                        .call();
+
+                System.out.println("Repository cloned to " + localRepoPath);
+                git.close();
+            } else {
+                System.out.println("Repository URL not found in the project.");
+            }
+        } catch (IOException | GitAPIException e) {
+            e.printStackTrace();
+        }
+    }
+
+    // Searches for the repository URL in known files
+    public static String findRepositoryUrl(File projectRoot) throws IOException {
+        File configFile = new File(projectRoot, "config.properties"); // Look in config.properties first
+        if (configFile.exists()) {
+            return extractUrlFromFile(configFile);
+        }
+
+        // Check .git/config as a fallback if config.properties isn't present
+        File gitConfigFile = new File(projectRoot, ".git/config");
+        if (gitConfigFile.exists()) {
+            return extractUrlFromFile(gitConfigFile);
+        }
+        
+        return null;
+    }
+
+    // Extracts the repository URL from a file
+    public static String extractUrlFromFile(File file) throws IOException {
+        Pattern urlPattern = Pattern.compile("https?://[\\w\\.-]+(?:/|\\w)*\\.git"); // Regex for a URL ending with .git
+        try (BufferedReader reader = new BufferedReader(new FileReader(file))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                Matcher matcher = urlPattern.matcher(line);
+                if (matcher.find()) {
+                    return matcher.group();
+                }
+            }
+        }
+        return null;
+    }
+}
+
+
+Explanation
+
+	1.	projectRootPath: The local project path to search for the repository URL.
+	2.	findRepositoryUrl(): Searches for the repository URL within config.properties or .git/config files.
+	3.	extractUrlFromFile(): Reads through the file to find a URL matching the pattern ending in .git.
+	4.	Cloning the Repository: Uses the URL to clone the repository with authentication, if required.
+
+Environment Variables for Security
+
+Store sensitive data like GIT_USERNAME and GIT_TOKEN as environment variables. The program will look up these variables and use default placeholders if not found.
+
+This approach allows flexibility in handling repository URLs and cloning them dynamically from the project setup.
+
+
