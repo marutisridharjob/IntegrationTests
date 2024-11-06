@@ -1,0 +1,160 @@
+To search for a project in a Git repository and retrieve its folder structure, you’ll need to use the GitHub API (or another Git service’s API) to locate the project by name. Once located, you can clone the project and list the folder structure.
+
+Here’s a Java solution that:
+
+	1.	Searches for a repository by name using the GitHub API.
+	2.	Clones the repository.
+	3.	Lists its folder structure.
+
+We’ll use JGit for cloning and the GitHub API to search.
+
+Step 1: Add Dependencies in pom.xml
+
+
+<dependencies>
+    <dependency>
+        <groupId>org.eclipse.jgit</groupId>
+        <artifactId>org.eclipse.jgit</artifactId>
+        <version>5.13.0.202109080827-r</version>
+    </dependency>
+    <dependency>
+        <groupId>com.google.code.gson</groupId>
+        <artifactId>gson</artifactId>
+        <version>2.8.9</version>
+    </dependency>
+</dependencies>
+
+
+Step 2: Implement the Code
+
+Create a class named GitProjectSearcher:
+
+GitProjectSearcher.java
+
+
+
+package com.example;
+
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
+import org.eclipse.jgit.api.Git;
+import org.eclipse.jgit.api.errors.GitAPIException;
+
+import java.io.File;
+import java.io.FileReader;
+import java.io.IOException;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.util.Scanner;
+
+public class GitProjectSearcher {
+
+    public static void main(String[] args) {
+        String projectName = "sample-project"; // Replace with the project name you're searching for
+
+        try {
+            String repoUrl = searchRepository(projectName);
+            if (repoUrl != null) {
+                String localDir = "tempRepo";
+                cloneRepository(repoUrl, localDir);
+                displayFolderStructure(Paths.get(localDir), 0);
+            } else {
+                System.out.println("Repository not found.");
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    // Step 1: Search for the repository by name using GitHub API
+    public static String searchRepository(String projectName) throws IOException {
+        String apiUrl = "https://api.github.com/search/repositories?q=" + projectName + "+in:name";
+        HttpURLConnection connection = (HttpURLConnection) new URL(apiUrl).openConnection();
+        connection.setRequestMethod("GET");
+        connection.setRequestProperty("Accept", "application/vnd.github.v3+json");
+
+        int responseCode = connection.getResponseCode();
+        if (responseCode == 200) {
+            Scanner scanner = new Scanner(connection.getInputStream());
+            StringBuilder response = new StringBuilder();
+            while (scanner.hasNext()) {
+                response.append(scanner.nextLine());
+            }
+            scanner.close();
+
+            JsonObject jsonResponse = JsonParser.parseString(response.toString()).getAsJsonObject();
+            JsonArray items = jsonResponse.getAsJsonArray("items");
+
+            if (items.size() > 0) {
+                JsonObject firstResult = items.get(0).getAsJsonObject();
+                String repoUrl = firstResult.get("clone_url").getAsString();
+                System.out.println("Repository found: " + repoUrl);
+                return repoUrl;
+            }
+        } else {
+            System.out.println("Failed to search GitHub. Response Code: " + responseCode);
+        }
+        return null;
+    }
+
+    // Step 2: Clone the repository
+    public static void cloneRepository(String repoUrl, String localDir) throws GitAPIException {
+        System.out.println("Cloning repository...");
+        try (Git git = Git.cloneRepository()
+                .setURI(repoUrl)
+                .setDirectory(new File(localDir))
+                .call()) {
+            System.out.println("Repository cloned successfully.");
+        }
+    }
+
+    // Step 3: Display the folder structure recursively
+    public static void displayFolderStructure(Path path, int indent) throws IOException {
+        if (Files.isDirectory(path)) {
+            System.out.println(getIndentString(indent) + "[D] " + path.getFileName());
+            try {
+                Files.list(path).forEach(subPath -> {
+                    try {
+                        displayFolderStructure(subPath, indent + 1);
+                    } catch (IOException e) {
+                        e.printStackTrace();
+                    }
+                });
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        } else {
+            System.out.println(getIndentString(indent) + "- " + path.getFileName());
+        }
+    }
+
+    private static String getIndentString(int indent) {
+        return "  ".repeat(indent);
+    }
+}
+
+
+Explanation of the Code
+
+	1.	Search the Repository: The searchRepository method uses the GitHub API to find a repository by name. It retrieves the clone_url of the first result.
+	2.	Clone the Repository: The cloneRepository method clones the repository into a specified local directory.
+	3.	Display Folder Structure: The displayFolderStructure method lists files and directories recursively.
+
+Step 3: Run the Code
+
+Replace projectName with the desired project name, and run GitProjectSearcher as a Java application. This script:
+
+	•	Searches for a project by name.
+	•	Clones the project if found.
+	•	Prints the folder structure in a formatted manner.
+
+Note: This example uses the GitHub API for simplicity. You’ll need a GitHub token if the API rate limit is exceeded. Adjust the headers accordingly if using a token.
+
+
+
+
