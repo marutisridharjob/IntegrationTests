@@ -1,0 +1,118 @@
+To create a Maven project that fetches a file from a Git repository, you can use the JGit library, which is a Java library for accessing Git repositories. Here’s a detailed guide on how to set up this Maven project:
+
+Step 1: Set Up a Maven Project
+
+	1.	Create a new Maven project in your IDE (IntelliJ IDEA, Eclipse, etc.), or from the command line:
+
+
+mvn archetype:generate -DgroupId=com.example -DartifactId=GitFetcher -DarchetypeArtifactId=maven-archetype-quickstart -DinteractiveMode=
+	
+2.	Navigate into the project folder:
+
+
+Step 2: Add Dependencies
+
+Add the following dependency in your pom.xml for JGit:
+
+<dependencies>
+    <dependency>
+        <groupId>org.eclipse.jgit</groupId>
+        <artifactId>org.eclipse.jgit</artifactId>
+        <version>5.13.0.202109080827-r</version>
+    </dependency>
+</dependencies>
+
+
+Step 3: Implement the Code to Fetch a File
+
+Create a class called GitFileFetcher in the src/main/java/com/example directory.
+
+GitFileFetcher.java
+
+
+package com.example;
+
+import org.eclipse.jgit.api.Git;
+import org.eclipse.jgit.api.errors.GitAPIException;
+import org.eclipse.jgit.api.errors.RefNotFoundException;
+import org.eclipse.jgit.transport.UsernamePasswordCredentialsProvider;
+
+import java.io.File;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Paths;
+
+public class GitFileFetcher {
+    public static void main(String[] args) {
+        String repoUrl = "https://github.com/username/repo.git";
+        String filePathInRepo = "path/to/file.txt"; // File to fetch from repo
+        String branch = "main"; // Specify the branch
+        String localDir = "tempRepo"; // Local directory to clone
+
+        try {
+            fetchFileFromRepo(repoUrl, filePathInRepo, branch, localDir);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    public static void fetchFileFromRepo(String repoUrl, String filePath, String branch, String localDir) throws GitAPIException, IOException {
+        // Clone the repository (shallow clone of a single branch)
+        File localRepoDir = new File(localDir);
+        try (Git git = Git.cloneRepository()
+                .setURI(repoUrl)
+                .setBranch(branch)
+                .setDirectory(localRepoDir)
+                .setCredentialsProvider(new UsernamePasswordCredentialsProvider("username", "password")) // Use your Git credentials
+                .call()) {
+
+            // Copy the file from the cloned repo to a desired location
+            File fileToFetch = new File(localRepoDir, filePath);
+            if (fileToFetch.exists()) {
+                Files.copy(fileToFetch.toPath(), Paths.get("downloaded_" + fileToFetch.getName()));
+                System.out.println("File fetched and copied successfully.");
+            } else {
+                System.out.println("File not found in the repository.");
+            }
+        } catch (RefNotFoundException e) {
+            System.out.println("Branch not found.");
+        } finally {
+            // Cleanup cloned directory
+            deleteDirectory(localRepoDir);
+        }
+    }
+
+    private static void deleteDirectory(File directory) {
+        if (directory.exists()) {
+            for (File file : directory.listFiles()) {
+                if (file.isDirectory()) {
+                    deleteDirectory(file);
+                } else {
+                    file.delete();
+                }
+            }
+            directory.delete();
+        }
+    }
+}
+
+
+Step 4: Run the Program
+
+	1.	Replace "username" and "password" with your Git credentials in the setCredentialsProvider.
+	2.	Run the GitFileFetcher class as a Java application. It will:
+	•	Clone the specified branch of the repository.
+	•	Fetch the specified file.
+	•	Copy it to your working directory with a prefix “downloaded_”.
+	•	Clean up the cloned repository folder.
+
+Step 5: Compile and Execute with Maven
+
+Compile and run the project using:
+
+
+mvn clean compile exec:java -Dexec.mainClass="com.example.GitFileFetcher"
+
+
+
+
