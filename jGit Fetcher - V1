@@ -211,3 +211,132 @@ Store sensitive data like GIT_USERNAME and GIT_TOKEN as environment variables. T
 This approach allows flexibility in handling repository URLs and cloning them dynamically from the project setup.
 
 
+------------------------------------------------------------------------------------------------------------------------
+
+f SSH is configured for accessing the Git repository, the approach will differ slightly since SSH keys handle authentication instead of a username and token. With JGit, SSH authentication can be set up using an SshSessionFactory that loads the SSH private key.
+
+Here’s how to adjust the Java program to handle SSH-based authentication.
+
+Steps for SSH Authentication
+
+	1.	Ensure that SSH keys are already configured on the machine and added to the SSH agent.
+	2.	Use JschConfigSessionFactory from JGit to manage the SSH session and load the private key.
+	3.	Adjust the code to handle an SSH-based repository URL.
+
+Updated Java Code Example with SSH
+
+This example uses SshSessionFactory to set up SSH configuration for JGit.
+
+
+import org.eclipse.jgit.api.Git;
+import org.eclipse.jgit.api.errors.GitAPIException;
+import org.eclipse.jgit.transport.JschConfigSessionFactory;
+import org.eclipse.jgit.transport.SshSessionFactory;
+import org.eclipse.jgit.util.FS;
+import com.jcraft.jsch.JSch;
+import com.jcraft.jsch.JSchException;
+import com.jcraft.jsch.Session;
+
+import java.io.BufferedReader;
+import java.io.File;
+import java.io.FileReader;
+import java.io.IOException;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
+public class GitRepositorySSHFetcher {
+    public static void main(String[] args) {
+        String projectRootPath = "path/to/your/project"; // Path to your local project folder
+        String localRepoPath = "path/to/clone/repo";     // Where you want to clone the repo
+
+        try {
+            // Step 1: Search for the repository URL
+            String repoUrl = findRepositoryUrl(new File(projectRootPath));
+            if (repoUrl != null && repoUrl.startsWith("git@")) { // Check if SSH URL
+                System.out.println("Found SSH repository URL: " + repoUrl);
+
+                // Step 2: Configure SSH session
+                SshSessionFactory sshSessionFactory = new JschConfigSessionFactory() {
+                    @Override
+                    protected void configure(com.jcraft.jsch.OpenSSHConfig.Host hc, Session session) {
+                        session.setConfig("StrictHostKeyChecking", "no");
+                    }
+
+                    @Override
+                    protected JSch createDefaultJSch(FS fs) throws JSchException {
+                        JSch jsch = super.createDefaultJSch(fs);
+                        // Load SSH key from default location (~/.ssh/id_rsa or configured location)
+                        jsch.addIdentity(System.getProperty("user.home") + "/.ssh/id_rsa");
+                        return jsch;
+                    }
+                };
+                SshSessionFactory.setInstance(sshSessionFactory);
+
+                // Step 3: Clone or fetch the repository using SSH
+                Git git = Git.cloneRepository()
+                        .setURI(repoUrl)
+                        .setDirectory(new File(localRepoPath))
+                        .setTransportConfigCallback(transport -> 
+                                transport.setSshSessionFactory(sshSessionFactory))
+                        .call();
+
+                System.out.println("Repository cloned to " + localRepoPath);
+                git.close();
+            } else {
+                System.out.println("No SSH repository URL found in the project.");
+            }
+        } catch (IOException | GitAPIException e) {
+            e.printStackTrace();
+        }
+    }
+
+    // Searches for the repository URL in known files
+    public static String findRepositoryUrl(File projectRoot) throws IOException {
+        File configFile = new File(projectRoot, "config.properties"); // Look in config.properties first
+        if (configFile.exists()) {
+            return extractUrlFromFile(configFile);
+        }
+
+        // Check .git/config as a fallback if config.properties isn't present
+        File gitConfigFile = new File(projectRoot, ".git/config");
+        if (gitConfigFile.exists()) {
+            return extractUrlFromFile(gitConfigFile);
+        }
+        
+        return null;
+    }
+
+    // Extracts the repository URL from a file
+    public static String extractUrlFromFile(File file) throws IOException {
+        Pattern urlPattern = Pattern.compile("(git@|https?://)[\\w\\.-]+:(?:/|\\w)*\\.git"); // Regex for SSH or HTTPS URL
+        try (BufferedReader reader = new BufferedReader(new FileReader(file))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                Matcher matcher = urlPattern.matcher(line);
+                if (matcher.find()) {
+                    return matcher.group();
+                }
+            }
+        }
+        return null;
+    }
+}
+
+
+
+Explanation
+
+	1.	SSH Configuration with JschConfigSessionFactory:
+	•	The custom JschConfigSessionFactory loads the SSH private key (typically located at ~/.ssh/id_rsa).
+	•	You can customize the path if needed or add additional configurations for SSH.
+	2.	Checking for SSH URL:
+	•	The program verifies that the URL starts with git@ (SSH) to differentiate from HTTPS URLs.
+	3.	Cloning with SSH:
+	•	The .setTransportConfigCallback() method allows setting the SSH session factory, enabling JGit to connect via SSH.
+
+Notes
+
+	•	This code assumes the SSH key has no passphrase, or that an SSH agent is managing the key. If a passphrase is required, you’ll need additional handling for passphrase input.
+	•	Make sure your SSH key has access permissions for the Git repository.
+
+This setup allows JGit to securely connect to Git repositories over SSH.
