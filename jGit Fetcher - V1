@@ -1,0 +1,104 @@
+To connect to a Git repository and fetch files programmatically in Java, you can use the JGit library, an open-source, Java-based Git library provided by the Eclipse Foundation.
+
+Here’s a simple example of how to do this:
+
+project-root/
+├── src/
+│   ├── main/
+│   │   ├── java/
+│   │   │   └── com/
+│   │   │       └── example/
+│   │   │           └── gitfetcher/
+│   │   │               └── GitRepositoryFetcher.java
+│   │   └── resources/
+│   └── test/
+│       ├── java/
+│       └── resources/
+├── pom.xml  # Maven configuration file
+└── README.md
+
+	1.	Add JGit to your project dependencies. If you’re using Maven, add the following to your pom.xml:
+
+
+<dependency>
+    <groupId>org.eclipse.jgit</groupId>
+    <artifactId>org.eclipse.jgit</artifactId>
+    <version>6.3.0.202209071007-r</version>
+</dependency>
+
+
+2.	Use the following code to clone a repository and fetch files:
+
+import org.eclipse.jgit.api.Git;
+import org.eclipse.jgit.api.errors.GitAPIException;
+import org.eclipse.jgit.transport.UsernamePasswordCredentialsProvider;
+import java.io.File;
+
+public class GitRepositoryFetcher {
+    public static void main(String[] args) {
+        String repoUrl = "https://github.com/user/repository.git"; // Replace with your repository URL
+        String localRepoPath = "path/to/local/folder";             // Replace with your local path
+        String username = "your-username";                         // Replace with your GitHub username
+        String token = "your-personal-access-token";               // Replace with your GitHub token
+
+ // Retrieve credentials from environment variables or use default values
+//        String username = System.getenv().getOrDefault("GIT_USERNAME", "default-username");
+//        String token = System.getenv().getOrDefault("GIT_TOKEN", "default-token");
+
+
+        try {
+            // Clone the repository with authentication
+            Git git = Git.cloneRepository()
+                    .setURI(repoUrl)
+                    .setDirectory(new File(localRepoPath))
+                    .setCredentialsProvider(new UsernamePasswordCredentialsProvider(username, token))
+                    .call();
+            System.out.println("Repository cloned to " + localRepoPath);
+
+            // Fetch files (optional if just cloning)
+            git.fetch()
+               .setCredentialsProvider(new UsernamePasswordCredentialsProvider(username, token))
+               .call();
+            System.out.println("Fetched latest files from remote repository");
+
+            git.close();
+        } catch (GitAPIException e) {
+            e.printStackTrace();
+        }
+    }
+}
+
+Explanation
+
+	1.	Repository URL (repoUrl): Replace with the URL of the repository you want to clone.
+	2.	Local Directory (localRepoPath): Replace with the path where you want to clone the repository.
+	3.	Credentials:
+	•	Username: Set your GitHub username.
+	•	Token: Set your GitHub Personal Access Token (PAT). This replaces the password for GitHub’s API.
+
+Security Tip
+
+For security, avoid hardcoding sensitive data directly in your code. Instead, consider using environment variables or a secure secrets management solution to store your credentials. For instance:
+
+
+String username = System.getenv("GIT_USERNAME");
+String token = System.getenv("GIT_TOKEN");
+
+Explanation
+
+	1.	Environment Variables:
+	•	System.getenv().getOrDefault("GIT_USERNAME", "default-username") checks for an environment variable called GIT_USERNAME.
+	•	If it’s set, it uses that value; otherwise, it falls back to "default-username".
+Similarly, GIT_TOKEN is checked and defaults to "default-token" if not found.
+	2.	Setting Environment Variables (Locally):
+	•	In Unix-based systems (Linux, macOS), set variables in your terminal:
+
+
+export GIT_USERNAME="your-username"
+export GIT_TOKEN="your-token"
+
+In Windows, set variables in the command prompt:
+
+setx GIT_USERNAME "your-username"
+setx GIT_TOKEN "your-token"
+
