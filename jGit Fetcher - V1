@@ -592,5 +592,83 @@ public class GitHubFolderDownloaderXML {
 }
 
 
+------------------
+
+
+Java Code to Download Only src/testfolder Using JGit
+
+
+import org.eclipse.jgit.api.Git;
+import org.eclipse.jgit.api.errors.GitAPIException;
+import org.eclipse.jgit.lib.ObjectId;
+import org.eclipse.jgit.lib.ObjectLoader;
+import org.eclipse.jgit.lib.Repository;
+import org.eclipse.jgit.revwalk.RevCommit;
+import org.eclipse.jgit.revwalk.RevTree;
+import org.eclipse.jgit.storage.file.FileRepositoryBuilder;
+import org.eclipse.jgit.treewalk.TreeWalk;
+
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.OutputStream;
+
+public class GitFolderDownloader {
+    public static void main(String[] args) {
+        String repoUrl = "https://github.com/user/repository.git"; // Replace with your repository URL
+        String branch = "main";                                   // Branch to access
+        String folderPath = "src/testfolder";                     // Folder path within the repository
+        String localRepoPath = "/path/to/temp/repo";              // Temporary path for the repository
+        String localSavePath = "/path/to/save/folder";            // Path to save downloaded files locally
+
+        try {
+            // Step 1: Clone the repository in a shallow manner to minimize data usage
+            File localRepoDir = new File(localRepoPath);
+            if (!localRepoDir.exists()) localRepoDir.mkdirs();
+            Git git = Git.cloneRepository()
+                    .setURI(repoUrl)
+                    .setDirectory(localRepoDir)
+                    .setBranch(branch)
+                    .setDepth(1)  // Shallow clone with depth 1
+                    .call();
+
+            // Step 2: Open the cloned repository
+            try (Repository repository = new FileRepositoryBuilder()
+                    .setGitDir(new File(localRepoPath + "/.git"))
+                    .build()) {
+
+                // Step 3: Get the latest commit and its tree
+                ObjectId lastCommitId = repository.resolve("refs/heads/" + branch);
+                RevCommit commit = git.getRepository().parseCommit(lastCommitId);
+                RevTree tree = commit.getTree();
+
+                // Step 4: Traverse the tree to find `src/testfolder`
+                try (TreeWalk treeWalk = new TreeWalk(repository)) {
+                    treeWalk.addTree(tree);
+                    treeWalk.setRecursive(true);
+                    treeWalk.setFilter(PathFilter.create(folderPath));
+
+                    while (treeWalk.next()) {
+                        // Step 5: For each file in the folder, download the content
+                        String filePath = treeWalk.getPathString();
+                        ObjectId objectId = treeWalk.getObjectId(0);
+                        ObjectLoader loader = repository.open(objectId);
+
+                        // Step 6: Save the file locally
+                        File targetFile = new File(localSavePath, filePath);
+                        targetFile.getParentFile().mkdirs();  // Ensure directory exists
+
+                        try (OutputStream out = new FileOutputStream(targetFile)) {
+                            loader.copyTo(out);
+                        }
+                        System.out.println("Downloaded: " + filePath);
+                    }
+                }
+            }
+        } catch (GitAPIException | IOException e) {
+            e.printStackTrace();
+        }
+    }
+}
 
 
