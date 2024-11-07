@@ -339,4 +339,155 @@ Notes
 	•	This code assumes the SSH key has no passphrase, or that an SSH agent is managing the key. If a passphrase is required, you’ll need additional handling for passphrase input.
 	•	Make sure your SSH key has access permissions for the Git repository.
 
-This setup allows JGit to securely connect to Git repositories over SSH.
+This setup allows JGit to securely connect to Git repositories over ------------------------------------------------------------------------------------------------------------------------
+
+------------------------------------------------------------------------------------------------------------------------
+
+
+Using JGit to download a specific folder directly without cloning the entire repository is not directly supported since JGit, like Git itself, doesn’t natively support partial cloning or sparse checkouts. However, you can approximate this by:
+	1.	Using the GitHub API or a similar endpoint to list files in a folder: This is necessary because JGit lacks native support for fetching individual files.
+	2.	Fetching the contents of each file in the folder: Using JGit, you can connect to the repository, and read blobs directly from the Git tree without performing a full clone.
+
+Here’s a way to download a specific folder by combining JGit for reading file blobs with the GitHub API for listing files.
+
+Java Program Example with JGit and GitHub API
+
+This approach:
+	1.	Lists files in a specific folder of a repository using the GitHub API.
+	2.	Downloads each file’s content using JGit’s tree reading capabilities.
+
+Before running the code, add the JGit library to your project. If using Maven, add this dependency:
+
+<dependency>
+    <groupId>org.eclipse.jgit</groupId>
+    <artifactId>org.eclipse.jgit</artifactId>
+    <version>6.3.0.202209071007-r</version>
+</dependency>
+
+
+import org.eclipse.jgit.api.Git;
+import org.eclipse.jgit.lib.ObjectId;
+import org.eclipse.jgit.lib.ObjectLoader;
+import org.eclipse.jgit.lib.Repository;
+import org.eclipse.jgit.revwalk.RevCommit;
+import org.eclipse.jgit.revwalk.RevTree;
+import org.eclipse.jgit.storage.file.FileRepositoryBuilder;
+import org.eclipse.jgit.treewalk.TreeWalk;
+import org.eclipse.jgit.api.errors.GitAPIException;
+
+import java.io.*;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.nio.file.Files;
+import java.nio.file.Paths;
+import java.util.Base64;
+import org.json.JSONArray;
+import org.json.JSONObject;
+
+public class GitHubFolderDownloader {
+    private static final String GITHUB_API_URL = "https://api.github.com/repos/";
+
+    public static void main(String[] args) throws IOException, GitAPIException {
+        String repoOwner = "user";
+        String repoName = "repository";
+        String folderPath = "path/to/folder";   // Path within the repo
+        String branch = "main";                 // Branch to access
+        String token = "your_github_token";     // GitHub token for private repos
+
+        // Step 1: Get the list of files in the folder
+        JSONArray filesList = getFilesListFromGitHub(repoOwner, repoName, folderPath, branch, token);
+        if (filesList == null) {
+            System.out.println("Failed to retrieve file list.");
+            return;
+        }
+
+        // Step 2: Use JGit to fetch each file's content and save locally
+        try (Repository repository = new FileRepositoryBuilder()
+                .setGitDir(new File(".git"))  // Temporary local repository
+                .build()) {
+
+            Git git = new Git(repository);
+            RevCommit latestCommit = git.log().setMaxCount(1).call().iterator().next();
+            RevTree tree = latestCommit.getTree();
+
+            for (int i = 0; i < filesList.length(); i++) {
+                JSONObject fileInfo = filesList.getJSONObject(i);
+                String filePath = fileInfo.getString("path");
+                downloadFile(repository, tree, filePath);
+            }
+        }
+    }
+
+    private static JSONArray getFilesListFromGitHub(String owner, String repo, String folderPath, String branch, String token) {
+        try {
+            String apiUrl = GITHUB_API_URL + owner + "/" + repo + "/contents/" + folderPath + "?ref=" + branch;
+            HttpURLConnection connection = (HttpURLConnection) new URL(apiUrl).openConnection();
+            connection.setRequestProperty("Authorization", "Bearer " + token);
+            connection.setRequestMethod("GET");
+
+            int responseCode = connection.getResponseCode();
+            if (responseCode == HttpURLConnection.HTTP_OK) {
+                BufferedReader reader = new BufferedReader(new InputStreamReader(connection.getInputStream()));
+                StringBuilder response = new StringBuilder();
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    response.append(line);
+                }
+                reader.close();
+                return new JSONArray(response.toString());
+            } else {
+                System.out.println("Failed to fetch file list, response code: " + responseCode);
+                return null;
+            }
+        } catch (IOException e) {
+            e.printStackTrace();
+            return null;
+        }
+    }
+
+    private static void downloadFile(Repository repository, RevTree tree, String filePath) throws IOException {
+        try (TreeWalk treeWalk = TreeWalk.forPath(repository, filePath, tree)) {
+            if (treeWalk != null) {
+                ObjectId objectId = treeWalk.getObjectId(0);
+                ObjectLoader loader = repository.open(objectId);
+
+                // Save file to local directory
+                File file = new File("local/downloaded/" + filePath);
+                file.getParentFile().mkdirs();  // Ensure the directory exists
+                try (OutputStream out = new FileOutputStream(file)) {
+                    loader.copyTo(out);
+                }
+                System.out.println("Downloaded: " + filePath);
+            } else {
+                System.out.println("File not found in tree: " + filePath);
+            }
+        }
+    }
+}
+
+Explanation
+
+	1.	getFilesListFromGitHub: Uses the GitHub API to get a list of files in the specified folder path.
+	•	This method sends a GET request to GitHub’s contents endpoint for a given folder, using a personal access token (required for private repositories).
+	•	The response is a JSON array of file metadata, including file paths.
+	2.	JGit Repository Setup:
+	•	Opens a temporary .git directory using FileRepositoryBuilder, allowing JGit to interact with the repository.
+	3.	Download Each File:
+	•	TreeWalk and ObjectLoader are used to read each file’s blob based on the file path.
+	•	Each file is saved to a local directory, maintaining the folder structure from the repository.
+
+Important Notes
+
+	•	GitHub Token: Use a personal access token if the repository is private. Set this up as an environment variable or securely manage it.
+	•	Temporary .git Directory: This example assumes a temporary .git directory is initialized in the local working directory. Adjust the path or repository setup as necessary.
+	•	Permissions: Ensure that the GitHub token has appropriate repository read permissions.
+
+This approach allows you to retrieve individual files from a specific folder in a Git repository without performing a full clone, using JGit to access file blobs.
+
+
+
+
+
+
+
+
