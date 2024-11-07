@@ -486,7 +486,110 @@ This approach allows you to retrieve individual files from a specific folder in 
 
 
 
+--------------xml
 
+
+import org.eclipse.jgit.api.Git;
+import org.eclipse.jgit.api.errors.GitAPIException;
+import org.eclipse.jgit.lib.ObjectId;
+import org.eclipse.jgit.lib.ObjectLoader;
+import org.eclipse.jgit.lib.Repository;
+import org.eclipse.jgit.revwalk.RevCommit;
+import org.eclipse.jgit.revwalk.RevTree;
+import org.eclipse.jgit.storage.file.FileRepositoryBuilder;
+import org.eclipse.jgit.treewalk.TreeWalk;
+
+import javax.xml.parsers.DocumentBuilder;
+import javax.xml.parsers.DocumentBuilderFactory;
+import javax.xml.xpath.XPath;
+import javax.xml.xpath.XPathConstants;
+import javax.xml.xpath.XPathFactory;
+import org.w3c.dom.Document;
+import org.w3c.dom.NodeList;
+
+import java.io.*;
+import java.net.HttpURLConnection;
+import java.net.URL;
+
+public class GitHubFolderDownloaderXML {
+    private static final String GITHUB_API_URL = "https://api.github.com/repos/";
+
+    public static void main(String[] args) throws IOException, GitAPIException {
+        String repoOwner = "user";
+        String repoName = "repository";
+        String folderPath = "path/to/folder";   // Path within the repo
+        String branch = "main";                 // Branch to access
+        String token = "your_github_token";     // GitHub token for private repos
+
+        // Step 1: Get the list of files in the folder
+        NodeList filesList = getFilesListFromGitHubXML(repoOwner, repoName, folderPath, branch, token);
+        if (filesList == null) {
+            System.out.println("Failed to retrieve file list.");
+            return;
+        }
+
+        // Step 2: Use JGit to fetch each file's content and save locally
+        try (Repository repository = new FileRepositoryBuilder()
+                .setGitDir(new File(".git"))  // Temporary local repository
+                .build()) {
+
+            Git git = new Git(repository);
+            RevCommit latestCommit = git.log().setMaxCount(1).call().iterator().next();
+            RevTree tree = latestCommit.getTree();
+
+            for (int i = 0; i < filesList.getLength(); i++) {
+                String filePath = filesList.item(i).getTextContent();
+                downloadFile(repository, tree, filePath);
+            }
+        }
+    }
+
+    private static NodeList getFilesListFromGitHubXML(String owner, String repo, String folderPath, String branch, String token) {
+        try {
+            String apiUrl = GITHUB_API_URL + owner + "/" + repo + "/contents/" + folderPath + "?ref=" + branch;
+            HttpURLConnection connection = (HttpURLConnection) new URL(apiUrl).openConnection();
+            connection.setRequestProperty("Authorization", "Bearer " + token);
+            connection.setRequestMethod("GET");
+
+            int responseCode = connection.getResponseCode();
+            if (responseCode == HttpURLConnection.HTTP_OK) {
+                // Parse XML response
+                DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+                DocumentBuilder builder = factory.newDocumentBuilder();
+                Document document = builder.parse(connection.getInputStream());
+
+                // Use XPath to extract file paths
+                XPath xPath = XPathFactory.newInstance().newXPath();
+                return (NodeList) xPath.evaluate("//path", document, XPathConstants.NODESET); // Adjust "path" based on XML structure
+            } else {
+                System.out.println("Failed to fetch file list, response code: " + responseCode);
+                return null;
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+            return null;
+        }
+    }
+
+    private static void downloadFile(Repository repository, RevTree tree, String filePath) throws IOException {
+        try (TreeWalk treeWalk = TreeWalk.forPath(repository, filePath, tree)) {
+            if (treeWalk != null) {
+                ObjectId objectId = treeWalk.getObjectId(0);
+                ObjectLoader loader = repository.open(objectId);
+
+                // Save file to local directory
+                File file = new File("local/downloaded/" + filePath);
+                file.getParentFile().mkdirs();  // Ensure the directory exists
+                try (OutputStream out = new FileOutputStream(file)) {
+                    loader.copyTo(out);
+                }
+                System.out.println("Downloaded: " + filePath);
+            } else {
+                System.out.println("File not found in tree: " + filePath);
+            }
+        }
+    }
+}
 
 
 
