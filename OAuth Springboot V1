@@ -1,0 +1,172 @@
+Here’s a detailed example of a simple Spring Boot application with OAuth2 integration using JWT tokens. This example uses Spring Security to implement an OAuth2 Resource Server and a Client Credentials flow.
+
+1. Dependencies (Add to pom.xml)
+
+<dependencies>
+    <!-- Spring Boot Starter Web -->
+    <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-web</artifactId>
+    </dependency>
+
+    <!-- Spring Boot Starter Security -->
+    <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-security</artifactId>
+    </dependency>
+
+    <!-- Spring Boot OAuth2 Resource Server -->
+    <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-oauth2-resource-server</artifactId>
+    </dependency>
+
+    <!-- OAuth2 Client (for acquiring tokens) -->
+    <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-oauth2-client</artifactId>
+    </dependency>
+</dependencies>
+
+2. Application Properties (application.yml)
+
+Configure the Authorization Server (e.g., Keycloak, Okta).
+
+server:
+  port: 8081
+
+spring:
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: https://your-auth-server/.well-known/openid-configuration
+      client:
+        registration:
+          my-client:
+            client-id: client-id
+            client-secret: client-secret
+            authorization-grant-type: client_credentials
+            scope: read write
+        provider:
+          custom-provider:
+            token-uri: https://your-auth-server/oauth2/token
+
+
+3. Security Configuration (SecurityConfig.java)
+
+This configures the resource server to validate JWT tokens and secure endpoints.
+
+
+package com.example.oauthdemo.config;
+
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.security.config.annotation.method.configuration.EnableGlobalMethodSecurity;
+import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.web.SecurityFilterChain;
+
+@Configuration
+@EnableGlobalMethodSecurity(prePostEnabled = true)
+public class SecurityConfig {
+
+    @Bean
+    public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+        http
+            .authorizeRequests(auth -> auth
+                .antMatchers("/public").permitAll() // Public endpoint
+                .anyRequest().authenticated()       // Secure all other endpoints
+            )
+            .oauth2ResourceServer(oauth2 -> oauth2.jwt()); // Enable JWT validation
+        return http.build();
+    }
+}
+
+
+4. Controller (DemoController.java)
+
+A simple controller with secured and unsecured endpoints.
+
+
+package com.example.oauthdemo.controller;
+
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+@RestController
+public class DemoController {
+
+    @GetMapping("/public")
+    public String publicEndpoint() {
+        return "This is a public endpoint!";
+    }
+
+    @GetMapping("/secure")
+    @PreAuthorize("hasAuthority('SCOPE_read')")
+    public String secureEndpoint() {
+        return "This is a secure endpoint!";
+    }
+}
+
+
+5. OAuth2 Client Configuration (For calling other microservices)
+
+Add a simple service to demonstrate how to acquire and use a token to call other microservices.
+
+Service for Fetching Token
+
+
+
+package com.example.oauthdemo.service;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.oauth2.client.OAuth2AuthorizedClient;
+import org.springframework.security.oauth2.client.OAuth2AuthorizedClientManager;
+import org.springframework.security.oauth2.client.annotation.RegisteredOAuth2AuthorizedClient;
+import org.springframework.security.oauth2.client.registration.ClientRegistration;
+import org.springframework.stereotype.Service;
+import org.springframework.web.reactive.function.client.WebClient;
+
+@Service
+public class OAuthService {
+
+    @Autowired
+    private OAuth2AuthorizedClientManager authorizedClientManager;
+
+    @Autowired
+    private WebClient.Builder webClientBuilder;
+
+    public String callSecuredService(String url) {
+        OAuth2AuthorizedClient client = authorizedClientManager.authorize(
+                new OAuth2AuthorizedClientManager.DefaultOAuth2AuthorizationContext(
+                        ClientRegistration.withRegistrationId("my-client").build(), null));
+
+        String token = client.getAccessToken().getTokenValue();
+
+        return webClientBuilder.build()
+                .get()
+                .uri(url)
+                .headers(headers -> headers.setBearerAuth(token))
+                .retrieve()
+                .bodyToMono(String.class)
+                .block();
+    }
+}
+
+
+
+6. Test Endpoints
+
+	•	Public Endpoint:
+Access via http://localhost:8081/public. This does not require a token.
+	•	Secure Endpoint:
+Use a valid JWT token with scope read to access http://localhost:8081/secure.
+
+
+Notes:
+
+	1.	Replace issuer-uri, client-id, and client-secret with your actual values.
+	2.	Ensure your Authorization Server is correctly configured to issue JWT tokens.
+	3.	Validate the token’s claims (e.g., scope) in your microservices to enforce fine-grained access control.
+
