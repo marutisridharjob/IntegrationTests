@@ -1,0 +1,129 @@
+1. Decode and Check Expiration Using a JWT Library
+
+You can use a library like Java JWT (io.jsonwebtoken) or Nimbus JWT to parse and validate the token.
+
+Using io.jsonwebtoken (JJWT)
+
+Add the dependency to your pom.xml:
+
+<dependency>
+    <groupId>io.jsonwebtoken</groupId>
+    <artifactId>jjwt-api</artifactId>
+    <version>0.11.5</version>
+</dependency>
+<dependency>
+    <groupId>io.jsonwebtoken</groupId>
+    <artifactId>jjwt-impl</artifactId>
+    <version>0.11.5</version>
+    <scope>runtime</scope>
+</dependency>
+<dependency>
+    <groupId>io.jsonwebtoken</groupId>
+    <artifactId>jjwt-jackson</artifactId>
+    <version>0.11.5</version>
+    <scope>runtime</scope>
+</dependency>
+
+
+
+Code to Check Token Expiry:
+
+import io.jsonwebtoken.Claims;
+import io.jsonwebtoken.Jwts;
+
+import java.util.Date;
+
+public class JWTValidator {
+
+    private static final String SECRET_KEY = "your-secret-key"; // Replace with your actual secret key
+
+    public static boolean isTokenExpired(String jwtToken) {
+        try {
+            // Parse the JWT and extract claims
+            Claims claims = Jwts.parserBuilder()
+                    .setSigningKey(SECRET_KEY.getBytes()) // Use the correct key
+                    .build()
+                    .parseClaimsJws(jwtToken)
+                    .getBody();
+
+            // Get expiration date
+            Date expirationDate = claims.getExpiration();
+
+            // Check if the current time is after the expiration date
+            return expirationDate.before(new Date());
+        } catch (Exception e) {
+            // Handle exceptions (invalid token, etc.)
+            e.printStackTrace();
+            return true; // Treat as expired if parsing fails
+        }
+    }
+
+    public static void main(String[] args) {
+        String jwtToken = "your-jwt-token"; // Replace with the actual JWT token
+
+        if (isTokenExpired(jwtToken)) {
+            System.out.println("Token is expired!");
+        } else {
+            System.out.println("Token is valid.");
+        }
+    }
+}
+
+
+2. Decode Without Verifying the Signature
+
+If you don’t want to validate the token (e.g., just to check the expiration), you can decode the token manually.
+
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import java.util.Base64;
+import java.util.Map;
+
+public class JWTDecoder {
+
+    public static boolean isTokenExpired(String jwtToken) {
+        try {
+            // Split the token into header, payload, and signature
+            String[] parts = jwtToken.split("\\.");
+            String payload = new String(Base64.getUrlDecoder().decode(parts[1]));
+
+            // Parse the payload into a Map
+            Map<String, Object> claims = new ObjectMapper().readValue(payload, Map.class);
+
+            // Extract expiration time (`exp`) and compare it to the current time
+            long exp = (Integer) claims.get("exp"); // `exp` is in seconds
+            return exp * 1000 < System.currentTimeMillis(); // Convert to milliseconds
+        } catch (Exception e) {
+            e.printStackTrace();
+            return true; // Assume expired if decoding fails
+        }
+    }
+
+    public static void main(String[] args) {
+        String jwtToken = "your-jwt-token"; // Replace with the actual JWT token
+
+        if (isTokenExpired(jwtToken)) {
+            System.out.println("Token is expired!");
+        } else {
+            System.out.println("Token is valid.");
+        }
+    }
+}
+
+3. Key Points
+
+	•	The exp claim is a timestamp in seconds since the epoch (UNIX time).
+	•	A valid JWT token should have the exp claim.
+	•	Always verify the signature when working with tokens in a secure environment.
+
+4. Testing Your Code
+
+Use a tool like JWT.io to inspect the token and confirm its expiration details.
+
+This approach is simple, secure, and follows best practices for handling JWT tokens.
+
+https://jwt.io/
+
+
+
+
