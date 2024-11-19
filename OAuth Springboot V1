@@ -1,4 +1,4 @@
-Here’s a detailed example of a simple Spring Boot application with OAuth2 integration using JWT tokens. This example uses Spring Security to implement an OAuth2 Resource Server and a Client Credentials flow.
+  Here’s a detailed example of a simple Spring Boot application with OAuth2 integration using JWT tokens. This example uses Spring Security to implement an OAuth2 Resource Server and a Client Credentials flow.
 
 1. Dependencies (Add to pom.xml)
 
@@ -169,4 +169,40 @@ Notes:
 	1.	Replace issuer-uri, client-id, and client-secret with your actual values.
 	2.	Ensure your Authorization Server is correctly configured to issue JWT tokens.
 	3.	Validate the token’s claims (e.g., scope) in your microservices to enforce fine-grained access control.
+
+
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import java.util.Base64;
+import java.util.Map;
+
+public class JWTDecoder {
+
+    public static boolean isTokenExpired(String token) {
+        try {
+            // Split the token into header, payload, and signature
+            String[] parts = token.split("\\.");
+            String payload = new String(Base64.getUrlDecoder().decode(parts[1]));
+
+            // Parse payload into a map
+            Map<String, Object> claims = new ObjectMapper().readValue(payload, Map.class);
+
+            // Get expiration time
+            long exp = (Integer) claims.get("exp");
+            return exp * 1000 < System.currentTimeMillis(); // Check expiration in milliseconds
+        } catch (Exception e) {
+            e.printStackTrace();
+            return true; // Assume expired if decoding fails
+        }
+    }
+
+    public static void main(String[] args) {
+        String token = "your-jwt-token"; // Replace with your JWT token
+        if (isTokenExpired(token)) {
+            System.out.println("Token is expired.");
+        } else {
+            System.out.println("Token is valid.");
+        }
+    }
+}
 
