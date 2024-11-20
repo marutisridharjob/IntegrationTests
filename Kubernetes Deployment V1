@@ -1,0 +1,316 @@
+Deploy Spring Boot REST application to Kubernetes:
+
+1. Prerequisites
+
+	•	A working Docker setup to build container images.
+	•	A Kubernetes cluster (local or cloud-based like Minikube, GKE, or EKS).
+	•	Kubernetes CLI (kubectl) installed and configured.
+
+2. Create a Docker Image for Your Spring Boot Application
+
+	1.	Add a Dockerfile in your Spring Boot project directory:
+
+dockerfile
+
+FROM openjdk:17-jdk-slim
+VOLUME /tmp
+ARG JAR_FILE=target/demo-0.0.1-SNAPSHOT.jar
+COPY ${JAR_FILE} app.jar
+ENTRYPOINT ["java", "-jar", "/app.jar"]
+
+
+
+	2.	Build the Docker image:
+Run the following command in the terminal at the root of your project:
+
+bash ->
+mvn clean package
+docker build -t springboot-rest-app:1.0 .
+
+
+
+	3.	Verify the image is built:
+
+bash -> docker images
+
+
+3. Push the Docker Image to a Container Registry
+
+(e.g., Docker Hub, AWS ECR, or GCP Container Registry)
+	1.	Log in to your container registry:
+
+bash -> docker login
+
+
+	2.	Tag the image for your registry:
+
+bash -> docker tag springboot-rest-app:1.0 <your-dockerhub-username>/springboot-rest-app:1.0
+
+
+	3.	Push the image to the registry:
+
+bash -> docker push <your-dockerhub-username>/springboot-rest-app:1.0
+
+4. Create Kubernetes Deployment and Service YAML Files
+
+	1.	Create deployment.yaml:
+
+deployment.yaml
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: springboot-rest-app
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: springboot-rest-app
+  template:
+    metadata:
+      labels:
+        app: springboot-rest-app
+    spec:
+      containers:
+      - name: springboot-rest-app
+        image: <your-dockerhub-username>/springboot-rest-app:1.0
+        ports:
+        - containerPort: 8080
+        env:
+        - name: JAVA_OPTS
+          value: "-Xmx512m"
+
+
+	2.	Create service.yaml:
+
+service.yaml
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: springboot-rest-app-service
+spec:
+  selector:
+    app: springboot-rest-app
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 8080
+  type: LoadBalancer
+
+5. Deploy to Kubernetes
+
+	1.	Apply the deployment file:
+
+bash -> kubectl apply -f deployment.yaml
+
+
+	3.	Verify the deployment:
+
+bash - kubectl get pods
+
+
+	4.	Verify the service:
+
+bash -> kubectl get svc
+
+
+6. Access the Application
+
+	1.	If using a cloud provider with a LoadBalancer (e.g., GKE, EKS):
+	•	Check the external IP from kubectl get svc and access it in your browser or API client (e.g., http://<EXTERNAL-IP>).
+	2.	If using Minikube, expose the service:
+
+bash -> minikube service springboot-rest-app-service
+
+
+7. Scaling Your Application
+
+To scale the application to more replicas:
+
+bash -> kubectl scale deployment springboot-rest-app --replicas=5
+
+8. Clean Up
+
+To delete the deployment and service:
+
+bash ->
+kubectl delete -f deployment.yaml
+kubectl delete -f service.yaml
+
+This guide provides a minimal setup for deploying your application. You can later explore advanced Kubernetes concepts like ConfigMaps, Secrets, and Horizontal Pod Autoscaling.
+
+
+---------------------------------------------------------------------------
+
+If Kubernetes is set up in your organization’s environment and not locally, follow these steps to deploy your Spring Boot application and troubleshoot:
+
+1. Set Up Access to the Organization’s Kubernetes Cluster
+
+	1.	Obtain kubeconfig:
+	•	Your organization should provide a kubeconfig file containing access credentials for the Kubernetes cluster.
+	•	Save this file (e.g., org-kubeconfig.yaml) locally.
+
+	2.	Point kubectl to the correct cluster:
+
+bash -> export KUBECONFIG=/path/to/org-kubeconfig.yaml
+
+Test the connection:
+
+bash -> kubectl get nodes
+
+If successful, it will list the cluster’s nodes.
+2. Build and Push Docker Image
+
+	•	If the cluster does not allow you to build directly, ensure the Docker image is built locally and pushed to a container registry accessible by the organization (e.g., Docker Hub, Amazon ECR, or GCP Container Registry).
+Example for Docker Hub:
+
+bash -> docker build -t <your-dockerhub-username>/springboot-rest-app:1.0 .
+docker push <your-dockerhub-username>/springboot-rest-app:1.0
+
+Ensure the cluster has access to this container registry.
+
+3. Update YAML Files with Org-Specific Details
+
+Update deployment.yaml and service.yaml:
+	•	Use the container registry URL accessible by your Kubernetes cluster.
+	•	Ensure any environment-specific variables (e.g., database URLs, credentials) are provided using ConfigMaps or Secrets.
+
+For example:
+
+env:
+- name: DATABASE_URL
+  valueFrom:
+    configMapKeyRef:
+      name: app-config
+      key: database-url
+
+Create the ConfigMap:
+
+bash -> kubectl create configmap app-config --from-literal=database-url="jdbc:postgresql://db-service:5432/mydb"
+
+4. Deploy to the Organization’s Cluster
+
+	1.	Apply Deployment and Service:
+
+bash -> kubectl apply -f deployment.yaml
+kubectl apply -f service.yaml
+
+
+
+	2.	Verify Pods Are Running:
+
+bash -> kubectl get pods
+
+	•	If pods are not running, describe the pod to check for errors:
+
+bash -> kubectl describe pod <pod-name>
+
+
+	3.	Check Logs:
+
+bash -> kubectl logs <pod-name>
+
+Logs will often show stack traces or errors (e.g., database connection issues, missing files).
+
+	4.	Verify Service:
+
+bash -> kubectl get svc
+
+	•	Confirm the external IP or Cluster IP is accessible.
+	•	Use curl to test the service endpoint:
+
+bash -> curl http://<external-ip>/api/endpoint
+
+5. Common Troubleshooting Scenarios
+
+Pods Failing to Start
+
+	•	Run kubectl describe pod to check if there are issues like:
+	•	Image Pull Error: Ensure the Docker image is accessible and correctly tagged.
+	•	Resource Limits: Check if the cluster has enough CPU/memory.
+
+resources:
+  limits:
+    memory: "512Mi"
+    cpu: "500m"
+
+
+
+Service Not Accessible
+
+	•	Ensure the Service type is correctly set:
+	•	Use LoadBalancer for external access.
+	•	Use NodePort for debugging (e.g., minikube or restricted environments).
+
+Environment Variables Missing
+
+	•	Ensure your environment variables are defined correctly in the deployment:
+
+envFrom:
+- configMapRef:
+    name: app-config
+
+
+Networking Issues
+
+	•	Use kubectl exec to test connectivity from a pod:
+
+bash -> kubectl exec -it <pod-name> -- /bin/sh
+curl http://<service-name>:<port>
+
+6. Troubleshooting Without Local Kubernetes
+
+If you do not have Kubernetes locally, you can:
+	1.	Test Docker Image Locally:
+	•	Run the Spring Boot app in a container:
+
+bash -> docker run -p 8080:8080 <your-dockerhub-username>/springboot-rest-app:1.0
+
+
+
+	•	Confirm the app is accessible at http://localhost:8080.
+
+	2.	Use a Staging Namespace:
+	•	Request a staging namespace in your organization’s Kubernetes environment for testing.
+	3.	Remote Logs and Monitoring:
+	•	Use tools like K9s, Lens, or a web-based Kubernetes dashboard to monitor deployments remotely.
+	4.	Helm for Reusability:
+	•	Convert YAML files to Helm charts for easier configuration and deployment in an organizational setup.
+
+
+7. Advanced (Optional)
+
+	•	Use RBAC:
+Ensure you have appropriate permissions in the cluster.
+
+bash -> kubectl auth can-i create pods
+
+
+	•	Set up Ingress for better service management:
+
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: springboot-app-ingress
+spec:
+  rules:
+  - host: springboot-app.orgenv.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: springboot-rest-app-service
+            port:
+              number: 80
+
+
+
+This ensures seamless integration into your organization’s Kubernetes environment.
+
+
+
+
+
