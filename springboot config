@@ -1,0 +1,96 @@
+Here’s an example demonstrating how to use Spring’s @ConfigurationProperties with application.properties for cleaner property management:
+
+Main Application
+
+package com.example.demo;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+
+@SpringBootApplication
+public class DemoApplication {
+    public static void main(String[] args) {
+        SpringApplication.run(DemoApplication.class, args);
+    }
+}
+
+
+Configuration Class
+
+package com.example.demo.config;
+
+import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.stereotype.Component;
+
+@Component
+@ConfigurationProperties(prefix = "app")
+public class AppConfig {
+
+    private String greeting;
+    private String version;
+
+    // Getters and Setters
+    public String getGreeting() {
+        return greeting;
+    }
+
+    public void setGreeting(String greeting) {
+        this.greeting = greeting;
+    }
+
+    public String getVersion() {
+        return version;
+    }
+
+    public void setVersion(String version) {
+        this.version = version;
+    }
+}
+
+
+Controller
+
+
+package com.example.demo;
+
+import com.example.demo.config.AppConfig;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+@RestController
+public class HelloController {
+
+    private final AppConfig appConfig;
+
+    public HelloController(AppConfig appConfig) {
+        this.appConfig = appConfig;
+    }
+
+    @GetMapping("/hello")
+    public String sayHello() {
+        return appConfig.getGreeting() + " (Version: " + appConfig.getVersion() + ")";
+    }
+}
+
+
+application.properties
+
+
+# Server configuration
+server.port=8080
+
+# Application-specific properties
+app.greeting=Hello, Spring Boot with Config!
+app.version=1.0.0
+
+Steps to Run:
+
+	1.	Place the above classes in the respective packages (com.example.demo and com.example.demo.config).
+	2.	Ensure the spring-boot-starter-web dependency is included in pom.xml.
+	3.	Start the application and navigate to http://localhost:8080/hello.
+Output: Hello, Spring Boot with Config! (Version: 1.0.0)
+
+This approach separates configuration logic, making the application more maintainable.
+
+
+
