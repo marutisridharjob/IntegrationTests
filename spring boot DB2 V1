@@ -185,4 +185,99 @@ curl http://localhost:8080/api/persons
 This project demonstrates a simple setup for saving data into a DB2 table using Spring Boot and JPA. Let me know if you need additional features!
 
 
+---------------
 
+Yes, by default, Spring Boot uses transaction management with auto-commit enabled for database operations unless explicitly configured otherwise. Here’s a more detailed explanation:
+
+Default Behavior in Spring Boot with JPA
+
+	1.	Auto-commit Enabled:
+	•	By default, when Spring Boot configures a datasource, it enables auto-commit mode. This means each SQL statement is committed immediately after execution unless a transaction boundary is defined.
+	2.	Transactional Behavior:
+	•	If you use methods provided by Spring Data JPA (e.g., save()), they run inside a transaction created by Spring.
+	•	Spring manages the transaction lifecycle. When the method completes, the transaction is committed (if successful) or rolled back (if an exception occurs).
+
+
+To Ensure Transactions for Multiple Operations
+
+For scenarios where you need multiple operations to occur in a single transaction, you must explicitly define transaction boundaries using @Transactional.
+
+Example:
+
+
+package com.example.db2demo.service;
+
+import com.example.db2demo.entity.Person;
+import com.example.db2demo.repository.PersonRepository;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+@Service
+public class PersonService {
+
+    private final PersonRepository personRepository;
+
+    public PersonService(PersonRepository personRepository) {
+        this.personRepository = personRepository;
+    }
+
+    @Transactional
+    public void saveMultiplePersons() {
+        Person person1 = new Person();
+        person1.setName("Alice");
+        person1.setAge(25);
+
+        Person person2 = new Person();
+        person2.setName("Bob");
+        person2.setAge(30);
+
+        personRepository.save(person1);
+        personRepository.save(person2);
+
+        // Uncomment to test rollback (simulating an exception)
+        // if (true) throw new RuntimeException("Simulated exception!");
+    }
+}
+
+
+Controlling Auto-Commit
+
+You can disable auto-commit globally or let Spring handle transactions:
+	1.	Disable Auto-Commit Globally:
+Add the following to your application.properties:
+
+
+spring.datasource.hikari.auto-commit=false
+
+
+	2.	Spring Transaction Management:
+Rely on Spring’s @Transactional annotation to manage commit and rollback boundaries, which will override the default auto-commit behavior.
+
+
+Example: Rollback on Exception
+
+If @Transactional is applied, Spring will:
+	•	Commit the transaction if no exceptions occur.
+	•	Roll back the transaction if an exception is thrown.
+
+Test Case:
+
+
+// In Controller or Service
+try {
+    personService.saveMultiplePersons();
+} catch (Exception e) {
+    System.out.println("Transaction Rolled Back: " + e.getMessage());
+}
+
+
+Result:
+
+	•	If all operations succeed, data is saved.
+	•	If an exception occurs, no data is saved (rollback).
+
+Summary
+
+	•	Auto-commit is enabled by default.
+	•	For transactional control, use @Transactional to group operations and ensure atomicity (commit or rollback).
+	•	Disabling auto-commit globally is usually unnecessary; rely on Spring’s transaction management instead.
