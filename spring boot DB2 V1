@@ -451,3 +451,117 @@ curl http://localhost:8080/api/persons
 
 The data will be saved in the PERSON_TABLE table with fields mapped correctly.
 
+
+
+-----------
+
+
+To save a list of Person objects to the database, you can use the saveAll method provided by Spring Data JPA. Here’s a code snippet:
+
+
+Service Class to Save a List of Persons
+
+package com.example.db2demo.service;
+
+import com.example.db2demo.entity.Person;
+import com.example.db2demo.repository.PersonRepository;
+import org.springframework.stereotype.Service;
+
+import java.util.List;
+
+@Service
+public class PersonService {
+
+    private final PersonRepository personRepository;
+
+    public PersonService(PersonRepository personRepository) {
+        this.personRepository = personRepository;
+    }
+
+    // Method to save a list of Person objects
+    public List<Person> savePersons(List<Person> persons) {
+        return personRepository.saveAll(persons);  // Saves all persons to the database
+    }
+}
+
+
+Controller Method to Accept a List of Persons
+
+
+package com.example.db2demo.controller;
+
+import com.example.db2demo.entity.Person;
+import com.example.db2demo.service.PersonService;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
+
+@RestController
+@RequestMapping("/api/persons")
+public class PersonController {
+
+    private final PersonService personService;
+
+    public PersonController(PersonService personService) {
+        this.personService = personService;
+    }
+
+    // Endpoint to save a list of Person objects
+    @PostMapping("/batch")
+    public List<Person> savePersons(@RequestBody List<Person> persons) {
+        return personService.savePersons(persons);
+    }
+}
+
+
+Sample Request to Save a List of Persons
+
+POST Request (JSON)
+
+URL: http://localhost:8080/api/persons/batch
+
+
+[
+  {
+    "name": "Alice",
+    "age": 25
+  },
+  {
+    "name": "Bob",
+    "age": 30
+  },
+  {
+    "name": "Charlie",
+    "age": 35
+  }
+]
+
+
+Expected Behavior
+
+	•	The POST request will send a list of Person objects to the /batch endpoint.
+	•	The savePersons method in the PersonService will persist all the objects to the database using saveAll.
+
+Advantages of saveAll
+
+	•	saveAll is optimized for batch inserts/updates.
+	•	Ensures all objects are saved in a single transaction (if used with @Transactional).
+
+
+Optional: Add Transaction Management
+
+If you want to ensure the operation is atomic (all or nothing), annotate the savePersons method with @Transactional:
+
+import org.springframework.transaction.annotation.Transactional;
+
+@Service
+public class PersonService {
+    @Transactional
+    public List<Person> savePersons(List<Person> persons) {
+        return personRepository.saveAll(persons);
+    }
+}
+
+If an exception occurs while saving, the entire batch will be rolled back.
+
+
