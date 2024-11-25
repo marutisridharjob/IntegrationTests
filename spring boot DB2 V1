@@ -564,4 +564,244 @@ public class PersonService {
 
 If an exception occurs while saving, the entire batch will be rolled back.
 
+----------------
+
+Here’s an example using Spring Data JPA 3.4.0, which maps a table with different column names to a Java class. It includes configuration for Spring Boot 3.4.0 with Hibernate and how to map a table and its columns.
+
+1. Maven pom.xml
+
+Include the required dependencies in your pom.xml:
+
+<dependencies>
+    <!-- Spring Boot Starter Data JPA -->
+    <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-data-jpa</artifactId>
+    </dependency>
+
+    <!-- DB2 Driver -->
+    <dependency>
+        <groupId>com.ibm.db2</groupId>
+        <artifactId>jcc</artifactId>
+        <version>11.5.7.0</version>
+    </dependency>
+
+    <!-- Spring Boot Starter Web -->
+    <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-web</artifactId>
+    </dependency>
+</dependencies>
+
+
+2. Configure application.properties
+
+Set up your DB2 database connection in src/main/resources/application.properties:
+
+# DB2 Database Configuration
+spring.datasource.url=jdbc:db2://<db-host>:<db-port>/<db-name>
+spring.datasource.username=<db-username>
+spring.datasource.password=<db-password>
+spring.datasource.driver-class-name=com.ibm.db2.jcc.DB2Driver
+
+# JPA Configuration
+spring.jpa.database-platform=org.hibernate.dialect.DB2Dialect
+spring.jpa.hibernate.ddl-auto=update
+logging.level.org.hibernate.SQL=DEBUG
+
+Replace <db-host>, <db-port>, <db-name>, <db-username>, and <db-password> with your DB2 instance details.
+
+
+3. Map the Entity to a Table
+
+Here’s how you map a Java class to a database table with custom column names.
+
+Table Schema (Example)
+
+CREATE TABLE PERSON_TABLE (
+    PERSON_ID BIGINT NOT NULL PRIMARY KEY,
+    FULL_NAME VARCHAR(100),
+    PERSON_AGE INT
+);
+
+Entity Class
+
+package com.example.demo.entity;
+
+import jakarta.persistence.*;
+
+@Entity
+@Table(name = "PERSON_TABLE") // Table mapping
+public class Person {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Column(name = "PERSON_ID") // Maps 'id' field to 'PERSON_ID'
+    private Long id;
+
+    @Column(name = "FULL_NAME") // Maps 'name' field to 'FULL_NAME'
+    private String name;
+
+    @Column(name = "PERSON_AGE") // Maps 'age' field to 'PERSON_AGE'
+    private int age;
+
+    // Getters and Setters
+    public Long getId() {
+        return id;
+    }
+
+    public void setId(Long id) {
+        this.id = id;
+    }
+
+    public String getName() {
+        return name;
+    }
+
+    public void setName(String name) {
+        this.name = name;
+    }
+
+    public int getAge() {
+        return age;
+    }
+
+    public void setAge(int age) {
+        this.age = age;
+    }
+}
+
+
+4. Repository Interface
+
+Define a Spring Data JPA repository to perform CRUD operations.
+
+
+package com.example.demo.repository;
+
+import com.example.demo.entity.Person;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.stereotype.Repository;
+
+@Repository
+public interface PersonRepository extends JpaRepository<Person, Long> {
+}
+
+5. Service to Save Persons
+
+Create a service layer to save or manage Person objects.
+
+
+package com.example.demo.service;
+
+import com.example.demo.entity.Person;
+import com.example.demo.repository.PersonRepository;
+import org.springframework.stereotype.Service;
+
+import java.util.List;
+
+@Service
+public class PersonService {
+
+    private final PersonRepository personRepository;
+
+    public PersonService(PersonRepository personRepository) {
+        this.personRepository = personRepository;
+    }
+
+    // Save a single person
+    public Person savePerson(Person person) {
+        return personRepository.save(person);
+    }
+
+    // Save a list of persons
+    public List<Person> saveAllPersons(List<Person> persons) {
+        return personRepository.saveAll(persons);
+    }
+
+    // Get all persons
+    public List<Person> getAllPersons() {
+        return personRepository.findAll();
+    }
+}
+
+
+6. Controller
+
+Create a REST controller to expose APIs for the above functionality.
+
+
+package com.example.demo.controller;
+
+import com.example.demo.entity.Person;
+import com.example.demo.service.PersonService;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
+
+@RestController
+@RequestMapping("/api/persons")
+public class PersonController {
+
+    private final PersonService personService;
+
+    public PersonController(PersonService personService) {
+        this.personService = personService;
+    }
+
+    // Save a single person
+    @PostMapping
+    public Person savePerson(@RequestBody Person person) {
+        return personService.savePerson(person);
+    }
+
+    // Save multiple persons
+    @PostMapping("/batch")
+    public List<Person> saveAllPersons(@RequestBody List<Person> persons) {
+        return personService.saveAllPersons(persons);
+    }
+
+    // Get all persons
+    @GetMapping
+    public List<Person> getAllPersons() {
+        return personService.getAllPersons();
+    }
+}
+
+
+7. Test the Application
+
+Start the application:
+
+mvn spring-boot:run
+
+Test using Postman or curl:
+
+	•	Save a single person:
+
+curl -X POST http://localhost:8080/api/persons \
+-H "Content-Type: application/json" \
+-d '{"name":"John Doe","age":30}'
+
+
+	•	Save multiple persons:
+
+curl -X POST http://localhost:8080/api/persons/batch \
+-H "Content-Type: application/json" \
+-d '[{"name":"Alice","age":25},{"name":"Bob","age":28}]'
+
+
+	•	Get all persons:
+
+curl http://localhost:8080/api/persons
+
+8. Output
+
+	•	The application will save data into the PERSON_TABLE in your DB2 database.
+	•	The table fields will map to the POJO fields as per the @Column annotations.
+
+This setup is fully functional with Spring Boot 3.4.0 and Spring Data JPA. Let me know if you face any issues!
+
+
+
 
